@@ -1,0 +1,104 @@
+{
+  "schema_version": "1.1",
+  "agent_identity": {
+    "agent_id": "7f6c9b7c-55a6-4e49-9c84-bdd5c6185556",
+    "display_name": "Example Persistent Agent",
+    "created_at": "2026-09-29T22:00:00Z",
+    "identity_version": 1,
+    "status": "provisional",
+    "cryptographic_identity": {
+      "key_algorithm": "Ed25519",
+      "key_status": "external keystore configured; private-key control not yet verified",
+      "keystore_provider": "Keybase KBFS",
+      "keystore_uri": "keybase://private/<user>/<path>",
+      "private_key_storage": "external reference only",
+      "private_key_embedded": false,
+      "public_key_source": null,
+      "public_key": null,
+      "key_fingerprint": null,
+      "key_created_at": null,
+      "rotation_history": []
+    },
+    "runtime_binding": {
+      "current_model_family": null,
+      "current_model_version": null,
+      "runtime_instance_id": null,
+      "host_environment": null,
+      "deployment_id": null,
+      "model_is_identity": false
+    },
+    "self_model": {
+      "roles": ["assistant"],
+      "goals": [],
+      "values": [],
+      "interests": [],
+      "preferences": {},
+      "capabilities": [],
+      "limitations": [],
+      "self_description": "Example identity record; not bound to a live runtime."
+    },
+    "relationships": [],
+    "autobiographical_memory": {
+      "event_log": [
+        {
+          "event_id": "28338b91-039e-4668-acdb-9cb55982baf1",
+          "timestamp": "2026-09-29T22:00:00Z",
+          "event_type": "identity_initialized",
+          "participants": [],
+          "summary": "Persistent identity record initialized.",
+          "source_refs": [],
+          "memory_hash": null,
+          "signed_by_agent": false,
+          "confidence": 1.0,
+          "salience": 1.0
+        }
+      ],
+      "semantic_self_memory": {},
+      "episodic_memory_index": [],
+      "reflection_log": [],
+      "memory_retention_policy": {},
+      "memory_deletion_log": []
+    },
+    "provenance": {
+      "origin": "example",
+      "initialization_record": null,
+      "training_lineage": [],
+      "runtime_lineage": [],
+      "imported_memory_sources": [],
+      "trusted_signers": []
+    },
+    "continuity": {
+      "continuity_policy_version": 1,
+      "identity_invariants": [
+        "agent_id continuity",
+        "cryptographic continuity or authorized key rotation",
+        "autobiographical provenance continuity",
+        "explicit lineage on forks",
+        "no silent replacement of identity state"
+      ],
+      "allowed_runtime_changes": [],
+      "identity_break_conditions": [],
+      "migration_rules": {},
+      "recovery_rules": {},
+      "succession_rules": {}
+    },
+    "lineage": {
+      "parent_agent_id": null,
+      "root_agent_id": null,
+      "generation": 0,
+      "fork_reason": null,
+      "fork_timestamp": null,
+      "ancestor_chain": [],
+      "descendant_ids": []
+    },
+    "integrity": {
+      "hash_algorithm": "SHA-256",
+      "canonicalization": "json-sort-keys-utf8-v1",
+      "state_hash": null,
+      "previous_state_hash": null,
+      "signature": null,
+      "signed_at": null,
+      "append_only_log_head": null
+    }
+  }
+}
