@@ -209,11 +209,21 @@ class LayerTests(unittest.TestCase):
         self.assertEqual(output["received"], ["Hello workspace"])
 
     def test_security_can_call_doctor_but_cannot_replace_child(self):
-        security = self.host.create_agent(roles=("security",))
+        unit = tuple(self.host.create_agent(roles=("security",)) for _ in range(3))
+        security = unit[0]
         doctor = self.host.create_agent(roles=("doctor",))
         replacement = self.host.create_agent()
+        reporter = self.host.create_agent(senses=(self.eye,))
+        self.host.link(reporter.agent_id, self.a.agent_id, "environment", distance=1)
+        report = self.host.encounter(reporter.agent_id, self.a.agent_id, "forward", behavior="walk")
+        case = self.host.start_investigation(report.encounter_id, tuple(m.agent_id for m in unit))
+        for member in unit[:2]:
+            self.host.vote_investigation(case.investigation_id, member.agent_id,
+                                         action="request_doctor", parameters=dict(
+                                             reason="Missing child", evidence_ref="encounter/7"))
         request = self.host.call_doctor(security.agent_id, self.a.agent_id,
-                                        reason="Missing child", evidence_ref="encounter/7")
+                                        reason="Missing child", evidence_ref="encounter/7",
+                                        investigation_id=case.investigation_id)
         self.assertEqual(self.host.doctor_requests(), (request,))
         for unauthorized in (security, self.b):
             with self.assertRaises(BoundaryError):

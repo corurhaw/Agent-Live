@@ -162,6 +162,32 @@ class DoctorRequest:
     evidence_ref: str
 
 
+@dataclass(frozen=True)
+class SecurityVote:
+    investigation_id: str
+    round_number: int
+    security_id: str
+    certificate_serial: str
+    action: str
+    parameters: str
+    voted_at: float
+    signature: str = ""
+
+    def body(self) -> str:
+        return _json({k: v for k, v in asdict(self).items() if k != "signature"})
+
+
+@dataclass(frozen=True)
+class Investigation:
+    investigation_id: str
+    report_id: str
+    patient_id: str
+    security_ids: tuple[str, ...]
+    round_number: int = 1
+    votes: tuple[SecurityVote, ...] = ()
+    closed: bool = False
+
+
 class LayerSupervisor:
     """Privileged reference API, never expose this object to untrusted agents.
 
@@ -204,6 +230,7 @@ class LayerSupervisor:
         self._reports: list[SecurityReport] = []
         self._emergency: dict[str, Observation] = {}
         self._doctor_requests: list[DoctorRequest] = []
+        self._investigations: dict[str, Investigation] = {}
         self._used_actions: dict[str, float] = {}
 
     def _now(self) -> float:
@@ -212,8 +239,8 @@ class LayerSupervisor:
             raise BoundaryError("clock must return a finite timestamp")
         return now
 
-    def _room(self, *, report: bool = False) -> None:
-        if len(self._events) >= self._max_events:
+    def _room(self, *, report: bool = False, events: int = 1) -> None:
+        if len(self._events) + events > self._max_events:
             raise BoundaryError("audit capacity exhausted; archive/restart required")
         if report and len(self._reports) >= self._max_reports:
             raise BoundaryError("security queue full; supervisor intervention required")
@@ -421,9 +448,177 @@ class LayerSupervisor:
                 or not self.check_integrity(self._ancestry(actor_id)[-1])):
             raise BoundaryError("valid certified " + role + " agent required")
 
+    def investigation(self, investigation_id: str) -> Investigation:
+        try:
+            return self._investigations[investigation_id]
+        except KeyError as exc:
+            raise BoundaryError("unknown security investigation") from exc
+
+    def _check_unit(self, members: tuple[str, ...], patient_id: str) -> None:
+        if len(members) != 3 or len(set(members)) != 3:
+            raise BoundaryError("an investigation needs exactly three distinct security agents")
+        roots = set()
+        for member in members:
+            self._require_role(member, "security")
+            roots.add(self._ancestry(member)[-1])
+        if len(roots) != 3 or self._ancestry(patient_id)[-1] in roots:
+            raise BoundaryError("unit members must be three individuals outside the patient")
+
+    def start_investigation(self, report_id: str,
+                            security_ids: tuple[str, ...]) -> Investigation:
+        """Trusted dispatcher assigns exactly one three-agent unit to a report."""
+        report = next((r for r in self.pending_reports() if r.encounter_id == report_id), None)
+        if report is None:
+            raise BoundaryError("investigation requires an existing security report")
+        patient_id = self._ancestry(report.observed_id)[-1]
+        members = tuple(security_ids)
+        self._check_unit(members, patient_id)
+        if len(self._investigations) >= self._max_reports:
+            raise BoundaryError("investigation capacity exhausted; archive closed cases")
+        if any(c.report_id == report_id and not c.closed for c in self._investigations.values()):
+            raise BoundaryError("report already has an active investigation")
+        case = Investigation(str(uuid4()), report_id, patient_id, members)
+        self._event("investigation_started", asdict(case))
+        self._investigations[case.investigation_id] = case
+        return case
+
+    def reassign_security_unit(self, investigation_id: str, security_ids: tuple[str, ...], *,
+                               reason: str, evidence_ref: str) -> Investigation:
+        """Trusted dispatcher replaces an unavailable unit, discarding its old votes."""
+        case = self.investigation(investigation_id)
+        if case.closed or not reason.strip() or not evidence_ref.strip():
+            raise BoundaryError("unit reassignment requires an open case and review evidence")
+        members = tuple(security_ids)
+        self._check_unit(members, case.patient_id)
+        updated = replace(case, security_ids=members, round_number=case.round_number + 1, votes=())
+        self._event("security_unit_reassigned", dict(previous=asdict(case), updated=asdict(updated),
+                                                     reason=reason, evidence_ref=evidence_ref))
+        self._investigations[investigation_id] = updated
+        return updated
+
+    def _investigation_parameters(self, action: str, parameters: dict) -> str:
+        fields = {"inspect": {"evidence_ref"}, "request_doctor": {"reason", "evidence_ref"},
+                  "quarantine": {"reason"}, "recover": {"reason", "evidence_ref"},
+                  "close": {"reason"}}
+        if (action not in fields or type(parameters) is not dict
+                or set(parameters) != fields[action]
+                or any(not isinstance(v, str) or not v.strip() for v in parameters.values())):
+            raise BoundaryError("unsupported investigation action or invalid parameters")
+        encoded = _json(parameters)
+        if len(encoded.encode()) > self._max_payload:
+            raise BoundaryError("investigation parameters exceed payload budget")
+        return encoded
+
+    def vote_investigation(self, investigation_id: str, security_id: str, *,
+                           action: str, parameters: dict) -> SecurityVote:
+        case = self.investigation(investigation_id)
+        self._check_unit(case.security_ids, case.patient_id)
+        if case.closed or security_id not in case.security_ids:
+            raise BoundaryError("only assigned unit members can vote on an open case")
+        encoded = self._investigation_parameters(action, parameters)
+        prior = next((v for v in case.votes if v.security_id == security_id), None)
+        if (prior and prior.action == action and prior.parameters == encoded
+                and self.verify_security_vote(prior)):
+            raise BoundaryError("duplicate vote")
+        cert = self.certificate(self._ancestry(security_id)[-1])
+        vote = SecurityVote(case.investigation_id, case.round_number, security_id,
+                            cert.serial, action, encoded, self._now())
+        vote = replace(vote, signature=_sign(self._keys[security_id],
+                                             "agent-live/security-vote/v1", vote.body()))
+        self._event("security_vote_revised" if prior else "security_vote_cast", asdict(vote))
+        votes = tuple(v for v in case.votes if v.security_id != security_id) + (vote,)
+        self._investigations[investigation_id] = replace(case, votes=votes)
+        return vote
+
+    def verify_security_vote(self, vote: SecurityVote) -> bool:
+        try:
+            self._require_role(vote.security_id, "security")
+            cert = self.certificate(self._ancestry(vote.security_id)[-1])
+            return (cert.serial == vote.certificate_serial and vote.voted_at <= self._now()
+                    and _verify(self.node(vote.security_id).public_key,
+                                "agent-live/security-vote/v1", vote.body(), vote.signature))
+        except BoundaryError:
+            return False
+
+    def _majority(self, case: Investigation) -> SecurityVote:
+        if case.closed:
+            raise BoundaryError("investigation is closed")
+        self._check_unit(case.security_ids, case.patient_id)
+        counts: dict[tuple[str, str], int] = {}
+        seen = set()
+        for vote in case.votes:
+            if (vote.security_id not in case.security_ids or vote.security_id in seen
+                    or vote.investigation_id != case.investigation_id
+                    or vote.round_number != case.round_number
+                    or not self.verify_security_vote(vote)):
+                raise BoundaryError("invalid or stale investigation vote")
+            seen.add(vote.security_id)
+            proposal = vote.action, vote.parameters
+            counts[proposal] = counts.get(proposal, 0) + 1
+        for vote in case.votes:
+            if counts[vote.action, vote.parameters] >= 2:
+                return vote
+        raise BoundaryError("no majority: two matching votes out of three are required")
+
+    def proceed_investigation(self, investigation_id: str, security_id: str) -> object:
+        """Consume one majority decision; every subsequent action needs new votes."""
+        case = self.investigation(investigation_id)
+        if security_id not in case.security_ids:
+            raise BoundaryError("only the assigned security unit can proceed")
+        winner = self._majority(case)
+        parameters = json.loads(winner.parameters)
+        self._investigation_parameters(winner.action, parameters)
+        # Reserve for decision, operation, and a possible failure record before
+        # any side effect. There is no concurrent writer in this reference host.
+        self._room(events=3)
+        self._event("investigation_decided", dict(investigation_id=investigation_id,
+                    round_number=case.round_number, action=winner.action,
+                    parameters=parameters, votes=[asdict(v) for v in case.votes]))
+        self._investigations[investigation_id] = replace(
+            case, round_number=case.round_number + 1, votes=(), closed=winner.action == "close")
+        try:
+            if winner.action == "request_doctor":
+                return self._enqueue_doctor(winner.security_id, case.patient_id, **parameters)
+            if winner.action == "quarantine":
+                return self.revoke(case.patient_id, **parameters)
+            if winner.action == "recover":
+                return self.recover(case.patient_id, **parameters)
+            if winner.action == "close":
+                if any(r.encounter_id == case.report_id for r in self.pending_reports()):
+                    self.acknowledge_report(case.report_id)
+                return None
+            # An inspection decision is a plan for the host's inspection adapter;
+            # it conveys no new permission to read private state or replace parts.
+            return dict(action="inspect", patient_id=case.patient_id, **parameters)
+        except Exception as exc:
+            self._event("investigation_step_failed", dict(investigation_id=investigation_id,
+                        round_number=case.round_number, error_type=type(exc).__name__))
+            raise
+
+    def archive_investigation(self, investigation_id: str) -> None:
+        """Trusted housekeeping; signed history remains in the audit/archive."""
+        if not self.investigation(investigation_id).closed:
+            raise BoundaryError("only closed investigations may be archived")
+        self._event("investigation_archived", investigation_id)
+        del self._investigations[investigation_id]
+
     def call_doctor(self, security_id: str, patient_id: str, *,
+                    reason: str, evidence_ref: str,
+                    investigation_id: str | None = None) -> DoctorRequest:
+        """Compatibility entry point: a single security agent cannot request treatment."""
+        self._require_role(security_id, "security")
+        if investigation_id is None:
+            raise BoundaryError("doctor requests require a three-agent investigation majority")
+        case = self.investigation(investigation_id)
+        winner = self._majority(case)
+        if (case.patient_id != patient_id or winner.action != "request_doctor"
+                or winner.parameters != _json(dict(reason=reason, evidence_ref=evidence_ref))):
+            raise BoundaryError("doctor request does not match the majority decision")
+        return self.proceed_investigation(investigation_id, security_id)
+
+    def _enqueue_doctor(self, security_id: str, patient_id: str, *,
                     reason: str, evidence_ref: str) -> DoctorRequest:
-        """Security requests medical help; this grants NO replacement authority."""
+        """Internal operation after a consumed majority decision; no replacement authority."""
         self._require_role(security_id, "security")
         self.node(patient_id)
         if not reason.strip() or not evidence_ref.strip():

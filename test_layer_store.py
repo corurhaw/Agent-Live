@@ -23,10 +23,18 @@ class LayerStoreTests(unittest.TestCase):
         host.dispatch(action)
         locked = host.create_agent()
         host.revoke(locked.agent_id, reason="Keep quarantined across restart")
-        security = host.create_agent(roles=("security",))
+        unit = tuple(host.create_agent(roles=("security",),
+                                       senses=(Eye("eye", "vision", 5),)) for _ in range(3))
+        security = unit[0]
         doctor = host.create_agent(roles=("doctor",))
-        referral = host.call_doctor(security.agent_id, locked.agent_id,
-                                    reason="Inspect quarantined agent", evidence_ref="case/1")
+        host.link(security.agent_id, locked.agent_id, "vision", distance=1)
+        report = host.encounter(security.agent_id, locked.agent_id, "eye", behavior="idle")
+        case = host.start_investigation(report.encounter_id, tuple(m.agent_id for m in unit))
+        for member in unit[:2]:
+            host.vote_investigation(case.investigation_id, member.agent_id,
+                                    action="request_doctor", parameters=dict(
+                                        reason="Inspect quarantined agent", evidence_ref="case/1"))
+        referral = host.proceed_investigation(case.investigation_id, security.agent_id)
         key = Fernet.generate_key()
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "supervisor.enc"

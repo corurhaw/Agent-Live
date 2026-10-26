@@ -70,8 +70,8 @@ signed incident slot preserves the evidence and the individual is isolated.
 There is at most one such emergency slot per individual.
 
 Only a valid agent with the certified `doctor` role may replace a child.
-Security agents can call `call_doctor()` and supply an evidence reference, but
-their `security` role does not authorize replacement. Role assignment is a
+Security units can approve a doctor request by majority and supply an evidence
+reference, but their `security` role does not authorize replacement. Role assignment is a
 privileged enrollment operation, never a self-declared capability.
 
 `replace_child(..., doctor_id=..., reason=..., evidence_ref=...)` requires a
@@ -86,6 +86,48 @@ issues a new certificate and retains the previous serial in the audit trail.
 The host's certificate authority performs this operation after review; certificate
 renewal alone cannot clear a security lockout. A host must authenticate the
 reviewing security/medical workflow before invoking this privileged API.
+
+## Three-agent security investigations
+
+Security responds to investigation reports in units of exactly three distinct,
+currently valid security agents belonging to three independent individuals.
+The patient cannot be one of those individuals. The trusted enclosing layer
+assigns a complete unit with `start_investigation(report_id, security_ids)`;
+one or two responders cannot start an investigation.
+
+Each next investigation action requires at least two matching votes out of the
+three assigned agents. Votes bind the case, round, voter, current certificate
+serial, action and exact parameters, timestamp, and Ed25519 signature. A plurality
+or three different proposals does not authorize action. A member can revise its
+vote before execution; the revision is audited and replaces that member's prior
+vote rather than adding another vote.
+
+`proceed_investigation()` checks all three members' current integrity, verifies
+the votes and consumes a majority decision once. The next action opens a fresh
+round with no inherited votes. Certificate changes require affected votes to be
+refreshed. Invalid unit membership freezes progress. The enclosing dispatcher can
+assign another complete unit with `reassign_security_unit()`, retaining the reason
+and evidence and discarding all old votes. This is dispatch authority, not a
+permission for an individual security agent to appoint its own majority.
+
+Supported decisions are inspection, requesting a doctor, quarantining the patient,
+reviewed certificate recovery, and closing the case. Inspection returns an approved
+plan for a host adapter, not unrestricted access to private state. Replacement is
+not an available security action, even with unanimous votes. The legacy
+`call_doctor()` entry point now requires a matching majority in an investigation;
+a single officer cannot use it to bypass voting.
+
+Votes and active rounds survive encrypted supervisor snapshots. Decisions,
+revisions and failed action attempts remain in the signed audit history. A failed
+attempt consumes its round; a retry needs a new vote. Closed cases can be removed
+from the bounded active registry with `archive_investigation()` after their signed
+history has been retained through the audit/archive pipeline.
+
+Immediate self-protection and automatic certificate enforcement remain available
+while a security unit is being dispatched. They do not grant a single security
+agent authority to decide investigation actions. Direct host control-plane methods
+such as `revoke()` and `recover()` must never be exposed as unrestricted security
+agent tools; the security adapter must route these actions through voting.
 
 ## Example
 
@@ -103,11 +145,19 @@ host.grant(agent.agent_id, "notes", "append")
 action = host.prepare_action(child.agent_id, "notes", "append", "A finding")
 host.dispatch(action)
 
-security = host.create_agent(roles=("security",))
+unit = tuple(host.create_agent(roles=("security",),
+                               senses=(Sense("forward", "vision", 10),)) for _ in range(3))
+security = unit[0]
 doctor = host.create_agent(roles=("doctor",))
 host.set_present(child.agent_id, False)
-request = host.call_doctor(security.agent_id, agent.agent_id,
-                           reason="Missing child", evidence_ref="encounter/123")
+host.link(security.agent_id, agent.agent_id, "vision", distance=1)
+report = host.encounter(security.agent_id, agent.agent_id, "forward", behavior="idle")
+case = host.start_investigation(report.encounter_id, tuple(m.agent_id for m in unit))
+for member in unit[:2]:
+    host.vote_investigation(case.investigation_id, member.agent_id,
+                            action="request_doctor", parameters=dict(
+                                reason="Missing child", evidence_ref="encounter/123"))
+request = host.proceed_investigation(case.investigation_id, security.agent_id)
 replacement = host.create_agent(capabilities=("analyze",))
 host.replace_child(agent.agent_id, child.agent_id, replacement.agent_id,
                     doctor_id=doctor.agent_id, reason="Inspected replacement",
@@ -129,8 +179,9 @@ python -m persistent_agent layers-demo
 
 `layer_store.save_supervisor()` atomically writes a private encrypted snapshot.
 It preserves identities, keys, certificates, permissions, lockouts, queued
-reports, doctor requests, replay state and audit history. A separate process can
-restore the same fingerprints with `load_supervisor()`.
+reports, doctor requests, active investigations, signed votes, replay state and
+audit history. A separate process can restore the same fingerprints and pending
+investigation rounds with `load_supervisor()`.
 
 The host supplies a Fernet encryption key from its keystore. Never put it in agent
 context, source control, logs, command-line arguments or the snapshot itself.

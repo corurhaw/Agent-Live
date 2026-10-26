@@ -6,6 +6,9 @@ The layered supervisor is privileged host code, not an OS sandbox. Never expose
 its Python object, signing keys, raw handlers, or arbitrary actor-ID parameters
 to untrusted agents. Authenticate callers outside their execution environment.
 Only certified doctors may replace children; security agents can request a doctor.
+Investigation adapters must assign three independent security agents and route
+each next action through the two-of-three voting API. Direct host control-plane
+methods are not unrestricted tools for individual security agents.
 Keep the encrypted supervisor snapshot and its encryption key separate. See
 [the runtime enforcement and persistence limits](docs/layered-runtime.md).
 

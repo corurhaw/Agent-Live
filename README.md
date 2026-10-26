@@ -43,7 +43,8 @@ the host must supply isolation and authenticated process integration.
 Agents receive their cryptographic identity from the enclosing layer immediately
 at creation. Certificates bind parents to all children. Senses are configurable
 in number and modality; encounters record signed evidence and can notify security.
-Security can request a doctor, but only a certified doctor can replace a child.
+Security investigates in units of three, with two matching votes required for
+each next action, including requesting a doctor. Only a certified doctor can replace a child.
 Revoked or mismatched compositions lose mediated outward access until reviewed
 recovery. Encrypted supervisor snapshots preserve identity across restarts.
 

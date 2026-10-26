@@ -27,11 +27,21 @@ def run_demo() -> dict:
     host.recover(individual.agent_id, reason="Offline demonstration inspected",
                   evidence_ref="demo/inspection/1")
 
-    security = host.create_agent(roles=("security",))
+    unit = tuple(host.create_agent(roles=("security",),
+                                   eyes=(Eye("front", "environment", 5),)) for _ in range(3))
+    security = unit[0]
     doctor = host.create_agent(roles=("doctor",))
     host.set_present(child.agent_id, False)
-    request = host.call_doctor(security.agent_id, individual.agent_id,
-                               reason="Missing component", evidence_ref="demo/encounter/2")
+    host.link(security.agent_id, individual.agent_id, "environment", distance=1)
+    medical_encounter = host.encounter(security.agent_id, individual.agent_id, "front",
+                                       behavior="idle")
+    case = host.start_investigation(medical_encounter.encounter_id,
+                                    tuple(member.agent_id for member in unit))
+    for member in unit[:2]:
+        host.vote_investigation(case.investigation_id, member.agent_id,
+                                action="request_doctor", parameters=dict(
+                                    reason="Missing component", evidence_ref="demo/encounter/2"))
+    request = host.proceed_investigation(case.investigation_id, security.agent_id)
     replacement = host.create_agent()
     security_denied = False
     try:
@@ -54,6 +64,7 @@ def run_demo() -> dict:
                 received=received, findings=observation.findings,
                 signed_observation_verified=host.verify_observation(observation),
                 security_reports=len(host.pending_reports()),
+                security_unit_size=len(unit), investigation_majority=2,
                 isolated_action_blocked=blocked,
                 security_replacement_denied=security_denied,
                 doctor_replacement_completed=host.node(replacement.agent_id).parent_id == individual.agent_id,

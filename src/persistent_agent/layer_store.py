@@ -20,7 +20,8 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from .layers import (AgentNode, AuditEvent, BoundaryError, Certificate, DoctorRequest, Sense,
-                     LayerSupervisor, Observation, SecurityReport, _json, _public, _verify)
+                     Investigation, LayerSupervisor, Observation, SecurityReport,
+                     SecurityVote, _json, _public, _verify)
 
 
 def _private(key: Ed25519PrivateKey) -> str:
@@ -49,6 +50,7 @@ def save_supervisor(host: LayerSupervisor, path: str | Path, encryption_key: byt
                  reports=[asdict(r) for r in host._reports],
                  emergency={k: asdict(o) for k, o in host._emergency.items()},
                  doctor_requests=[asdict(r) for r in host._doctor_requests],
+                 investigations=[asdict(c) for c in host._investigations.values()],
                  used_actions=host._used_actions)
     encrypted = Fernet(encryption_key).encrypt(_json(state).encode())
     target = Path(path)
@@ -120,6 +122,10 @@ def load_supervisor(path: str | Path, encryption_key: bytes, *,
                            for k, o in state["emergency"].items()}
         host._used_actions = state["used_actions"]
         host._doctor_requests = [DoctorRequest(**r) for r in state["doctor_requests"]]
+        for raw in state.get("investigations", []):
+            case = Investigation(**{**raw, "security_ids": tuple(raw["security_ids"]),
+                                     "votes": tuple(SecurityVote(**v) for v in raw["votes"])})
+            host._investigations[case.investigation_id] = case
         return host
     except (InvalidToken, ValueError, KeyError, TypeError) as exc:
         raise BoundaryError("invalid encrypted supervisor snapshot") from exc
