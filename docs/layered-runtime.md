@@ -177,6 +177,15 @@ claim, or verify that an opaque evidence reference contains the claimed evidence
 The enclosing host must dispatch the auditor worker and provide its authorized
 access to the relevant signed investigation and archive records.
 
+## Department of Justice and justice system
+
+The architecture includes a Department of Justice and a broader justice system,
+alongside its security-investigation and independent-auditor functions.
+Their institutional roles, jurisdiction, procedures, relationships and powers
+remain to be defined. Recording their existence does not assign judicial
+authority to the existing security or auditor roles. The current runtime does
+not implement justice-system proceedings or adjudication.
+
 ## Example
 
 ```python
