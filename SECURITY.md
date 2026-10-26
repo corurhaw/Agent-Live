@@ -1,5 +1,14 @@
 # Security Policy
 
+## Experimental layered runtime
+
+The layered supervisor is privileged host code, not an OS sandbox. Never expose
+its Python object, signing keys, raw handlers, or arbitrary actor-ID parameters
+to untrusted agents. Authenticate callers outside their execution environment.
+Only certified doctors may replace children; security agents can request a doctor.
+Keep the encrypted supervisor snapshot and its encryption key separate. See
+[the runtime enforcement and persistence limits](docs/layered-runtime.md).
+
 ## Private keys
 
 Do **not** commit private keys, seed phrases, recovery material, Keybase private-directory contents, hardware-token secrets, or decrypted keystore exports.

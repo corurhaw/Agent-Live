@@ -16,6 +16,7 @@ python -m pip install .
 python -m persistent_agent validate examples/agent-identity.example.json
 python -m persistent_agent snapshot examples/agent-identity.example.json --output identity.json
 python -m persistent_agent validate identity.json
+python -m persistent_agent layers-demo
 python -m unittest -v
 ```
 
@@ -33,7 +34,21 @@ successful build; it does not operate an always-running agent.
 A runtime host must install this package, load `identity.json` on startup and
 save authorized changes to a durable private volume. Keep live identity state,
 relationship data and secrets out of this public repository. External model
-calls, task execution, signing and identity binding to ChatGPT are not included.
+calls and identity binding to ChatGPT are not included. The experimental layered
+runtime adds signed identities, certificates and mediated resource operations;
+the host must supply isolation and authenticated process integration.
+
+### Layered agent workspace
+
+Agents receive their cryptographic identity from the enclosing layer immediately
+at creation. Certificates bind parents to all children. Senses are configurable
+in number and modality; encounters record signed evidence and can notify security.
+Security can request a doctor, but only a certified doctor can replace a child.
+Revoked or mismatched compositions lose mediated outward access until reviewed
+recovery. Encrypted supervisor snapshots preserve identity across restarts.
+
+See [the runtime contract and example](docs/layered-runtime.md) for APIs, resource
+budgets, key custody and the remaining host enforcement requirements.
 
 ### Files
 

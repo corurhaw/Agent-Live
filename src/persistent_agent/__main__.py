@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import sys
 
@@ -14,6 +15,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Validate or save persistent agent identity snapshots.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("layers-demo", help="exercise the offline layered security runtime")
     validate = commands.add_parser("validate", help="validate a record and print its hash")
     validate.add_argument("path", type=Path)
     snapshot = commands.add_parser("snapshot", help="save a validated record with its hash")
@@ -21,6 +23,10 @@ def main(argv: list[str] | None = None) -> int:
     snapshot.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "layers-demo":
+            from .layer_demo import run_demo
+            print(json.dumps(run_demo(), indent=2))
+            return 0
         record = IdentityRecord.load(args.path)
         if args.command == "snapshot":
             record = record.with_state_hash()
