@@ -9,6 +9,10 @@ Only certified doctors may replace children; security agents can request a docto
 Investigation adapters must assign three independent security agents and route
 each next action through the two-of-three voting API. Direct host control-plane
 methods are not unrestricted tools for individual security agents.
+Auditor and security roles must be in separate individuals. Accepted misconduct
+claims enter a mandatory review queue, including claims raised by quarantined
+agents through the protected host reporting channel. Security cannot adjudicate
+its own complaint, bypass a pending review, or archive an unreviewed claim.
 Keep the encrypted supervisor snapshot and its encryption key separate. See
 [the runtime enforcement and persistence limits](docs/layered-runtime.md).
 

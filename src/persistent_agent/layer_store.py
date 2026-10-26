@@ -19,7 +19,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from .layers import (AgentNode, AuditEvent, BoundaryError, Certificate, DoctorRequest, Sense,
+from .layers import (AgentNode, AuditEvent, AuditFinding, AuditReview, BoundaryError, Certificate, DoctorRequest, Sense,
                      Investigation, LayerSupervisor, Observation, SecurityReport,
                      SecurityVote, _json, _public, _verify)
 
@@ -51,6 +51,8 @@ def save_supervisor(host: LayerSupervisor, path: str | Path, encryption_key: byt
                  emergency={k: asdict(o) for k, o in host._emergency.items()},
                  doctor_requests=[asdict(r) for r in host._doctor_requests],
                  investigations=[asdict(c) for c in host._investigations.values()],
+                 archived_investigations=[asdict(c) for c in host._archived_investigations.values()],
+                 audit_reviews=[asdict(r) for r in host._audit_reviews.values()],
                  used_actions=host._used_actions)
     encrypted = Fernet(encryption_key).encrypt(_json(state).encode())
     target = Path(path)
@@ -122,10 +124,19 @@ def load_supervisor(path: str | Path, encryption_key: bytes, *,
                            for k, o in state["emergency"].items()}
         host._used_actions = state["used_actions"]
         host._doctor_requests = [DoctorRequest(**r) for r in state["doctor_requests"]]
-        for raw in state.get("investigations", []):
-            case = Investigation(**{**raw, "security_ids": tuple(raw["security_ids"]),
-                                     "votes": tuple(SecurityVote(**v) for v in raw["votes"])})
-            host._investigations[case.investigation_id] = case
+        for field, registry in (("investigations", host._investigations),
+                                ("archived_investigations", host._archived_investigations)):
+            for raw in state.get(field, []):
+                case = Investigation(**{**raw, "security_ids": tuple(raw["security_ids"]),
+                                         "security_roots": tuple(raw.get("security_roots", ())),
+                                         "votes": tuple(SecurityVote(**v) for v in raw["votes"])})
+                registry[case.investigation_id] = case
+        for raw in state.get("audit_reviews", []):
+            finding = raw["finding"]
+            if finding is not None:
+                finding = AuditFinding(**{**finding, "evidence_refs": tuple(finding["evidence_refs"])})
+            review = AuditReview(**{**raw, "finding": finding})
+            host._audit_reviews[review.complaint_id] = review
         return host
     except (InvalidToken, ValueError, KeyError, TypeError) as exc:
         raise BoundaryError("invalid encrypted supervisor snapshot") from exc

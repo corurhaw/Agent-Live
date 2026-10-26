@@ -122,12 +122,60 @@ revisions and failed action attempts remain in the signed audit history. A faile
 attempt consumes its round; a retry needs a new vote. Closed cases can be removed
 from the bounded active registry with `archive_investigation()` after their signed
 history has been retained through the audit/archive pipeline.
+Their compact case records remain in a separately bounded reviewable archive so
+later claims can still refer to closed investigations. This archive is never
+silently evicted when full.
 
 Immediate self-protection and automatic certificate enforcement remain available
 while a security unit is being dispatched. They do not grant a single security
 agent authority to decide investigation actions. Direct host control-plane methods
 such as `revoke()` and `recover()` must never be exposed as unrestricted security
 agent tools; the security adapter must route these actions through voting.
+
+## Independent auditors
+
+Claims of security impropriety trigger mandatory independent review through
+`raise_security_complaint()`. This applies during an investigation and after
+closure or archiving. The signed complaint captures the claim, evidence reference,
+the investigation state at the time of the claim and an audit-chain checkpoint.
+It is an allegation requiring examination, not proof of misconduct or authority
+to punish security agents.
+
+The `auditor` role is separate from `security`. The two roles cannot coexist in
+one individual, including across its child components, and doctor-mediated
+replacement cannot merge them. The assigned auditor must also be independent of
+the patient, claimant and all current/former security-unit individuals recorded
+for the case. Security cannot select its own reviewer through its action API;
+the enclosing layer dispatches auditors with `assign_auditor()`.
+
+`pending_audits()` exposes all accepted claims still requiring review. No available
+auditor leaves the claim pending; it does not dismiss or approve it. Security
+cannot close the investigation or archive it while a required review is pending.
+Inspection, protective operations and ordinary majority-controlled investigative
+steps may continue. An enclosing-layer reporting channel accepts complaints from
+known, authenticated claimants even while their ordinary outward access is locked.
+The host must provide that channel independently of the accused security unit.
+
+Only the assigned, currently valid independent auditor can call
+`submit_audit_finding()`. It requires evidence references, a rationale and one of
+`substantiated`, `unsubstantiated`, or `inconclusive`. The auditor signs the finding;
+security has no action for overriding, dismissing or completing the review. An
+unavailable auditor can be replaced by the trusted dispatcher, with the assignment
+change recorded. Findings do not automatically revoke identities, replace children
+or determine sanctions.
+
+Pending reviews, assignments, completed findings and reviewable archived case
+records survive encrypted snapshots. Completed reviews may leave the bounded
+registry only through `archive_audit_review()` after a trusted durable sink saves
+them successfully. Unreviewed claims cannot be discarded. Capacity exhaustion
+returns an explicit failure rather than a false acceptance or silent eviction;
+the host must durably queue and retry unaccepted incoming reports.
+
+This runtime enforces review requirements and records an auditor-supplied
+assessment. It does not itself run an auditor model, establish the truth of a
+claim, or verify that an opaque evidence reference contains the claimed evidence.
+The enclosing host must dispatch the auditor worker and provide its authorized
+access to the relevant signed investigation and archive records.
 
 ## Example
 
@@ -167,6 +215,17 @@ host.recover(replacement.agent_id, reason="Replacement checked",
 host.recover(agent.agent_id, reason="Composition checked",
               evidence_ref="inspection/125")
 host.acknowledge_doctor_request(doctor.agent_id, request.request_id)
+
+complaint = host.raise_security_complaint(case.investigation_id, agent.agent_id,
+                                         claim="Concern about security procedure",
+                                         evidence_ref="encounter/123")
+auditor = host.create_agent(roles=("auditor",))
+host.assign_auditor(complaint.complaint_id, auditor.agent_id)
+# The assigned auditor examines authorized records before supplying its finding.
+finding = host.submit_audit_finding(complaint.complaint_id, auditor.agent_id,
+                                    outcome="inconclusive", rationale="More evidence is needed",
+                                    evidence_refs=("encounter/123", "inspection/125"))
+assert host.verify_audit_finding(finding)
 ```
 
 Run the included offline vertical slice:

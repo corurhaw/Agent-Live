@@ -45,6 +45,8 @@ at creation. Certificates bind parents to all children. Senses are configurable
 in number and modality; encounters record signed evidence and can notify security.
 Security investigates in units of three, with two matching votes required for
 each next action, including requesting a doctor. Only a certified doctor can replace a child.
+Claims of security impropriety require a separate independent auditor's review;
+security cannot dismiss the claim or close the case before that review is recorded.
 Revoked or mismatched compositions lose mediated outward access until reviewed
 recovery. Encrypted supervisor snapshots preserve identity across restarts.
 

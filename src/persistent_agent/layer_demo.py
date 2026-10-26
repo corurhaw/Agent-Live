@@ -58,6 +58,16 @@ def run_demo() -> dict:
     host.recover(individual.agent_id, reason="Repaired individual checked",
                   evidence_ref="demo/inspection/4")
     host.acknowledge_doctor_request(doctor.agent_id, request.request_id)
+    complaint = host.raise_security_complaint(case.investigation_id, individual.agent_id,
+                                             claim="Simulated concern about security procedure",
+                                             evidence_ref="demo/encounter/2")
+    audit_required = bool(host.pending_audits(case.investigation_id))
+    auditor = host.create_agent(roles=("auditor",))
+    host.assign_auditor(complaint.complaint_id, auditor.agent_id)
+    finding = host.submit_audit_finding(complaint.complaint_id, auditor.agent_id,
+                                        outcome="inconclusive",
+                                        rationale="Demonstration review; no real incident",
+                                        evidence_refs=("demo/encounter/2", "demo/inspection/4"))
     return dict(individual_id=individual.agent_id, fingerprint=individual.fingerprint,
                 child_id=child.agent_id, child_fingerprint=child.fingerprint,
                 signing_participants=[s.agent_id for s in action.signatures],
@@ -65,6 +75,8 @@ def run_demo() -> dict:
                 signed_observation_verified=host.verify_observation(observation),
                 security_reports=len(host.pending_reports()),
                 security_unit_size=len(unit), investigation_majority=2,
+                independent_audit_required=audit_required,
+                auditor_finding_verified=host.verify_audit_finding(finding),
                 isolated_action_blocked=blocked,
                 security_replacement_denied=security_denied,
                 doctor_replacement_completed=host.node(replacement.agent_id).parent_id == individual.agent_id,

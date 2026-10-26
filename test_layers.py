@@ -206,6 +206,8 @@ class LayerTests(unittest.TestCase):
         self.assertTrue(output["signed_observation_verified"])
         self.assertTrue(output["security_replacement_denied"])
         self.assertTrue(output["doctor_replacement_completed"])
+        self.assertTrue(output["independent_audit_required"])
+        self.assertTrue(output["auditor_finding_verified"])
         self.assertEqual(output["received"], ["Hello workspace"])
 
     def test_security_can_call_doctor_but_cannot_replace_child(self):

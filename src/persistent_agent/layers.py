@@ -186,6 +186,41 @@ class Investigation:
     round_number: int = 1
     votes: tuple[SecurityVote, ...] = ()
     closed: bool = False
+    security_roots: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AuditFinding:
+    complaint_id: str
+    auditor_id: str
+    certificate_serial: str
+    outcome: str
+    rationale: str
+    evidence_refs: tuple[str, ...]
+    evaluated_at: float
+    signature: str = ""
+
+    def body(self) -> str:
+        return _json({k: v for k, v in asdict(self).items() if k != "signature"})
+
+
+@dataclass(frozen=True)
+class AuditReview:
+    complaint_id: str
+    investigation_id: str
+    claimant_id: str
+    raised_at: float
+    claim: str
+    evidence_ref: str
+    investigation_snapshot: str
+    audit_head: str | None
+    claim_signature: str = ""
+    auditor_id: str | None = None
+    finding: AuditFinding | None = None
+
+    def complaint_body(self) -> str:
+        return _json({k: v for k, v in asdict(self).items()
+                      if k not in ("claim_signature", "auditor_id", "finding")})
 
 
 class LayerSupervisor:
@@ -231,6 +266,8 @@ class LayerSupervisor:
         self._emergency: dict[str, Observation] = {}
         self._doctor_requests: list[DoctorRequest] = []
         self._investigations: dict[str, Investigation] = {}
+        self._archived_investigations: dict[str, Investigation] = {}
+        self._audit_reviews: dict[str, AuditReview] = {}
         self._used_actions: dict[str, float] = {}
 
     def _now(self) -> float:
@@ -320,6 +357,20 @@ class LayerSupervisor:
             self._manifests[agent_id] = _json(sorted(members, key=lambda m: m["agent_id"]))
         return self._manifests[agent_id]
 
+    def _component_roles(self, agent_id: str, *, exclude: str | None = None) -> set[str]:
+        pending, roles = [agent_id], set()
+        while pending:
+            member = pending.pop()
+            if member != exclude:
+                roles.update(self.node(member).roles)
+                pending.extend(self._children[member])
+        return roles
+
+    @staticmethod
+    def _separate_auditors(roles: set[str]) -> None:
+        if {"security", "auditor"} <= roles:
+            raise BoundaryError("auditor and security roles must belong to separate individuals")
+
     def _issue(self, agent_id: str) -> Certificate:
         now = self._now()
         certificate = Certificate(str(uuid4()), agent_id, self.issuer_public_key,
@@ -355,9 +406,13 @@ class LayerSupervisor:
                 or len({sense.sense_id for sense in senses}) != len(senses)
                 or any(not isinstance(c, str) or not c for c in capabilities)
                 or len(set(capabilities)) != len(capabilities)
-                or any(r not in ("security", "doctor") for r in roles)
+                or any(r not in ("security", "doctor", "auditor") for r in roles)
                 or len(set(roles)) != len(roles)):
             raise BoundaryError("unique senses, named capabilities, and authorized roles required")
+        combined_roles = set(roles)
+        if parent_id is not None:
+            combined_roles.update(self._component_roles(self._ancestry(parent_id)[-1]))
+        self._separate_auditors(combined_roles)
         if len(_json([asdict(s) for s in senses] + list(capabilities) + list(roles))) > self._max_payload:
             raise BoundaryError("agent description exceeds budget")
         key = Ed25519PrivateKey.generate()
@@ -477,7 +532,8 @@ class LayerSupervisor:
             raise BoundaryError("investigation capacity exhausted; archive closed cases")
         if any(c.report_id == report_id and not c.closed for c in self._investigations.values()):
             raise BoundaryError("report already has an active investigation")
-        case = Investigation(str(uuid4()), report_id, patient_id, members)
+        case = Investigation(str(uuid4()), report_id, patient_id, members,
+                             security_roots=tuple(self._ancestry(m)[-1] for m in members))
         self._event("investigation_started", asdict(case))
         self._investigations[case.investigation_id] = case
         return case
@@ -490,7 +546,10 @@ class LayerSupervisor:
             raise BoundaryError("unit reassignment requires an open case and review evidence")
         members = tuple(security_ids)
         self._check_unit(members, case.patient_id)
-        updated = replace(case, security_ids=members, round_number=case.round_number + 1, votes=())
+        roots = (set(case.security_roots) | {self._ancestry(m)[-1] for m in members}
+                 | {self._ancestry(m)[-1] for m in case.security_ids})
+        updated = replace(case, security_ids=members, round_number=case.round_number + 1,
+                          votes=(), security_roots=tuple(sorted(roots)))
         self._event("security_unit_reassigned", dict(previous=asdict(case), updated=asdict(updated),
                                                      reason=reason, evidence_ref=evidence_ref))
         self._investigations[investigation_id] = updated
@@ -566,6 +625,8 @@ class LayerSupervisor:
         if security_id not in case.security_ids:
             raise BoundaryError("only the assigned security unit can proceed")
         winner = self._majority(case)
+        if winner.action == "close" and self.pending_audits(investigation_id):
+            raise BoundaryError("independent auditor review is required before closing this case")
         parameters = json.loads(winner.parameters)
         self._investigation_parameters(winner.action, parameters)
         # Reserve for decision, operation, and a possible failure record before
@@ -599,8 +660,118 @@ class LayerSupervisor:
         """Trusted housekeeping; signed history remains in the audit/archive."""
         if not self.investigation(investigation_id).closed:
             raise BoundaryError("only closed investigations may be archived")
+        if self.pending_audits(investigation_id):
+            raise BoundaryError("cannot archive an investigation awaiting auditor review")
+        if len(self._archived_investigations) >= self._max_reports:
+            raise BoundaryError("reviewable investigation archive is full")
         self._event("investigation_archived", investigation_id)
-        del self._investigations[investigation_id]
+        self._archived_investigations[investigation_id] = self._investigations.pop(investigation_id)
+
+    def _reviewable_investigation(self, investigation_id: str) -> Investigation:
+        case = self._investigations.get(investigation_id) or self._archived_investigations.get(investigation_id)
+        if case is None:
+            raise BoundaryError("unknown investigation for auditor review")
+        return case
+
+    def audit_review(self, complaint_id: str) -> AuditReview:
+        try:
+            return self._audit_reviews[complaint_id]
+        except KeyError as exc:
+            raise BoundaryError("unknown security complaint") from exc
+
+    def pending_audits(self, investigation_id: str | None = None) -> tuple[AuditReview, ...]:
+        return tuple(r for r in self._audit_reviews.values() if r.finding is None
+                     and (investigation_id is None or r.investigation_id == investigation_id))
+
+    def raise_security_complaint(self, investigation_id: str, claimant_id: str, *,
+                                 claim: str, evidence_ref: str) -> AuditReview:
+        """Protected host reporting channel, including for quarantined claimants.
+
+        Acceptance creates a mandatory review; no security vote can dismiss it.
+        An allegation does not itself revoke anyone's identity or establish guilt.
+        """
+        case = self._reviewable_investigation(investigation_id)
+        self.node(claimant_id)  # The host authenticates this caller, even during lockout.
+        if not claim.strip() or not evidence_ref.strip():
+            raise BoundaryError("a claim and evidence reference are required")
+        if len(_json([claim, evidence_ref]).encode()) > self._max_payload:
+            raise BoundaryError("complaint exceeds payload budget")
+        if len(self._audit_reviews) >= self._max_reports:
+            raise BoundaryError("auditor review queue full; complaint was not accepted")
+        review = AuditReview(str(uuid4()), investigation_id, claimant_id, self._now(),
+                             claim, evidence_ref, _json(asdict(case)), self._audit_head)
+        review = replace(review, claim_signature=_sign(self._keys[claimant_id],
+                         "agent-live/security-complaint/v1", review.complaint_body()))
+        self._event("independent_audit_required", asdict(review))
+        self._audit_reviews[review.complaint_id] = review
+        return review
+
+    def _check_auditor(self, review: AuditReview, auditor_id: str) -> None:
+        self._require_role(auditor_id, "auditor")
+        root = self._ancestry(auditor_id)[-1]
+        self._separate_auditors(self._component_roles(root))
+        case = self._reviewable_investigation(review.investigation_id)
+        snapshot = json.loads(review.investigation_snapshot)
+        involved = (set(case.security_roots) | set(snapshot.get("security_roots", ()))
+                    | {self._ancestry(m)[-1] for m in case.security_ids}
+                    | {case.patient_id, self._ancestry(case.patient_id)[-1],
+                       self._ancestry(review.claimant_id)[-1]})
+        if root in involved:
+            raise BoundaryError("auditor must be independent of the unit, patient and claimant")
+
+    def verify_security_complaint(self, review: AuditReview) -> bool:
+        return _verify(self.node(review.claimant_id).public_key,
+                       "agent-live/security-complaint/v1", review.complaint_body(),
+                       review.claim_signature)
+
+    def assign_auditor(self, complaint_id: str, auditor_id: str) -> AuditReview:
+        """Trusted enclosing-layer dispatch; security does not select its own reviewer."""
+        review = self.audit_review(complaint_id)
+        if review.finding is not None:
+            raise BoundaryError("audit review is already complete")
+        self._check_auditor(review, auditor_id)
+        self._event("auditor_assigned", dict(complaint_id=complaint_id, auditor_id=auditor_id,
+                                             previous_auditor=review.auditor_id))
+        updated = replace(review, auditor_id=auditor_id)
+        self._audit_reviews[complaint_id] = updated
+        return updated
+
+    def submit_audit_finding(self, complaint_id: str, auditor_id: str, *, outcome: str,
+                             rationale: str, evidence_refs: tuple[str, ...]) -> AuditFinding:
+        review = self.audit_review(complaint_id)
+        self._check_auditor(review, auditor_id)
+        if review.finding is not None or review.auditor_id != auditor_id:
+            raise BoundaryError("only the assigned auditor can complete an unfinished review")
+        refs = tuple(evidence_refs)
+        if (outcome not in ("substantiated", "unsubstantiated", "inconclusive")
+                or not rationale.strip() or not refs
+                or any(not isinstance(ref, str) or not ref.strip() for ref in refs)):
+            raise BoundaryError("auditor must provide an outcome, rationale and evidence references")
+        if len(_json([rationale, refs]).encode()) > self._max_payload:
+            raise BoundaryError("audit finding exceeds payload budget")
+        cert = self.certificate(self._ancestry(auditor_id)[-1])
+        finding = AuditFinding(complaint_id, auditor_id, cert.serial, outcome, rationale,
+                               refs, self._now())
+        finding = replace(finding, signature=_sign(self._keys[auditor_id],
+                          "agent-live/audit-finding/v1", finding.body()))
+        self._event("independent_audit_completed", asdict(finding))
+        self._audit_reviews[complaint_id] = replace(review, finding=finding)
+        return finding
+
+    def verify_audit_finding(self, finding: AuditFinding) -> bool:
+        """Historical signature verification, independent of later certificate renewal."""
+        return _verify(self.node(finding.auditor_id).public_key,
+                       "agent-live/audit-finding/v1", finding.body(), finding.signature)
+
+    def archive_audit_review(self, complaint_id: str, durable_sink: Callable[[AuditReview], None]) -> None:
+        """Completed reviews may leave the bounded registry only after durable export."""
+        review = self.audit_review(complaint_id)
+        if review.finding is None:
+            raise BoundaryError("unreviewed claims cannot be archived or dismissed")
+        self._room()
+        durable_sink(review)
+        self._event("audit_review_archived", complaint_id)
+        del self._audit_reviews[complaint_id]
 
     def call_doctor(self, security_id: str, patient_id: str, *,
                     reason: str, evidence_ref: str,
@@ -659,6 +830,8 @@ class LayerSupervisor:
                 or new.parent_id is not None or new_id in self._ancestry(parent_id)
                 or not self.check_integrity(new_id)):
             raise BoundaryError("reviewed replacement with a valid independent node required")
+        self._separate_auditors(self._component_roles(self._ancestry(parent_id)[-1], exclude=old_id)
+                                | self._component_roles(new_id))
         # Check the deepest replacement path before changing any membership.
         pending, depth = [(new_id, 1)], len(self._ancestry(parent_id))
         while pending:
