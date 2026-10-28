@@ -1,0 +1,103 @@
+[
+  {
+    "name": "Sign in and preserve a research source",
+    "sanity": true,
+    "viewport": "desktop",
+    "covers": [
+      "account sign-in",
+      "create source",
+      "bibliographic provenance",
+      "database persistence",
+      "edit source"
+    ],
+    "description": "An authenticated researcher can save a complete source and edit its metadata without losing it on refresh.",
+    "steps": [
+      "Sign in through the workspace sign-in flow",
+      "Open New source and create a source titled 'QA Research Source' with author 'QA Scientist', year '2026', and DOI '10.1234/qa'",
+      "Open its detail inspector and confirm metadata appears",
+      "Edit its title to 'QA Research Source Revised' and save",
+      "Refresh; confirm revised title and DOI remain in Research library"
+    ],
+    "expected": "The edited source persists in the authenticated workspace with its bibliographic fields."
+  },
+  {
+    "name": "Create claims and connect evidence",
+    "viewport": "desktop",
+    "covers": [
+      "claim creation",
+      "evidence relationship creation",
+      "interactive graph",
+      "claim inspector"
+    ],
+    "description": "Sources and claims can be connected in a traceable graph.",
+    "steps": [
+      "Sign in",
+      "Create a source titled 'Graph Study'",
+      "Create a claim titled 'Graph Test Claim' with an explanation",
+      "Open Knowledge graph and choose Connect nodes",
+      "Connect Graph Study to Graph Test Claim with relationship 'supports'",
+      "Confirm the relationship appears and click Graph Test Claim to inspect it"
+    ],
+    "expected": "Knowledge graph contains the source, claim, and supports relationship, and the claim inspector opens."
+  },
+  {
+    "name": "Track and export a hypothesis",
+    "viewport": "desktop",
+    "covers": [
+      "hypothesis creation",
+      "status and confidence editing",
+      "export JSON",
+      "export CSV"
+    ],
+    "description": "Researchers can maintain an explicit judgment separate from verified evidence and export records.",
+    "steps": [
+      "Sign in",
+      "Create hypothesis titled 'QA Hypothesis' with 35% confidence and status 'investigating'",
+      "Open its detail and verify status and confidence",
+      "Edit status to 'contested' and confidence to 20%, then save",
+      "Export JSON from header, and CSV from Hypotheses screen"
+    ],
+    "expected": "Hypothesis shows contested with 20% confidence and exports contain the research record."
+  },
+  {
+    "name": "Mobile required-title validation",
+    "viewport": "mobile",
+    "covers": [
+      "mobile layout",
+      "required-title guardrail",
+      "invalid-write prevention"
+    ],
+    "description": "A blank research source cannot be saved and validation appears on mobile.",
+    "steps": [
+      "Sign in on mobile viewport",
+      "Tap New source",
+      "Leave Title blank and tap Create record",
+      "Observe the validation error",
+      "Close the form and confirm no blank source appeared"
+    ],
+    "expected": "A visible title-required validation appears, and no blank source is created."
+  },
+  {
+    "name": "Confirm deletion and remove graph connections",
+    "viewport": "desktop",
+    "covers": [
+      "delete confirmation",
+      "delete persistence",
+      "relationship cleanup",
+      "record inspection"
+    ],
+    "description": "Deleting a source requires confirmation and removes its linked visual relationships.",
+    "setup": [
+      "Sign in and create source 'Source To Delete'",
+      "Create claim 'Claim For Deletion'",
+      "Connect Source To Delete to Claim For Deletion with supports relation"
+    ],
+    "steps": [
+      "Open Research library and inspect Source To Delete",
+      "Select Delete and cancel the confirmation; verify source remains",
+      "Select Delete again and confirm",
+      "Refresh and open Knowledge graph"
+    ],
+    "expected": "Deleted source is absent after refresh and its supports relationship no longer appears in the graph."
+  }
+]
