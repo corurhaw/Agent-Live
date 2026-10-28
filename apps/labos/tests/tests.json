@@ -1,0 +1,102 @@
+[
+  {
+    "name": "Create, edit and retain a lab asset",
+    "sanity": true,
+    "viewport": "desktop",
+    "covers": [
+      "sign in",
+      "private inventory",
+      "asset creation",
+      "asset editing",
+      "database persistence",
+      "inventory inspection"
+    ],
+    "description": "Verifies authenticated CRUD for a physical device persists after browser refresh.",
+    "steps": [
+      "Sign in to the private LabOS workspace",
+      "Open Asset inventory and select Add asset",
+      "Create a Workstation titled QA Compute Node with hostname qa-node.lab and VLAN 20",
+      "Inspect QA Compute Node, edit its name to QA Compute Node Revised, save and refresh",
+      "Return to Asset inventory and inspect the revised device"
+    ],
+    "expected": "QA Compute Node Revised remains in the inventory with hostname qa-node.lab and VLAN 20."
+  },
+  {
+    "name": "Map a link between documented devices",
+    "viewport": "desktop",
+    "covers": [
+      "network topology visualization",
+      "network device nodes",
+      "network link CRUD",
+      "link validation"
+    ],
+    "description": "Verifies network diagram displays manually mapped devices and links.",
+    "steps": [
+      "Sign in and register assets Test Router One and Test Switch Two",
+      "Open Network topology and select Add link",
+      "Create QA Copper Link from Test Router One to Test Switch Two at 10 GbE",
+      "Confirm both devices and their connection appear in the topology and link registry",
+      "Open the link inspector"
+    ],
+    "expected": "The documented link appears in the topology and shows its speed and two device endpoints."
+  },
+  {
+    "name": "Maintain an experiment and a project",
+    "viewport": "desktop",
+    "covers": [
+      "experiment notebook",
+      "methods and results",
+      "project lifecycle",
+      "tasks and progress",
+      "editing"
+    ],
+    "description": "Verifies researchers can record experiment methods and project progress.",
+    "steps": [
+      "Sign in and open Experiment notebook",
+      "Create an experiment QA PID Controller with objective, procedure and observations",
+      "Inspect the experiment and verify its procedure appears",
+      "Open Projects & tasks and create QA FPGA Setup with tasks and progress 25",
+      "Inspect and edit project progress to 50, then refresh"
+    ],
+    "expected": "Experiment notes are visible and QA FPGA Setup retains its tasks and revised progress of 50%."
+  },
+  {
+    "name": "Procurement and telemetry data entry",
+    "viewport": "desktop",
+    "covers": [
+      "procurement estimates",
+      "purchase planning",
+      "manual measurements",
+      "measurement history",
+      "CSV/JSON export"
+    ],
+    "description": "Verifies prospective purchases and manual readings have durable visible outputs.",
+    "steps": [
+      "Sign in and create a documented asset named QA Server",
+      "Open Procurement planning and add QA SSD Upgrade with estimated price 220 and target price 180",
+      "Confirm the estimated procurement total includes $220",
+      "Open Monitoring and record QA Server CPU usage of 42 percent",
+      "Confirm recorded CPU is 42%, then use Export and CSV export controls"
+    ],
+    "expected": "The purchase appears in procurement, the latest manual reading shows 42% CPU, and export actions provide saved datasets."
+  },
+  {
+    "name": "Validate required input and confirm deletion on mobile",
+    "viewport": "mobile",
+    "covers": [
+      "mobile navigation",
+      "required-title validation",
+      "destructive confirmation",
+      "database deletion"
+    ],
+    "description": "Verifies invalid records are rejected and removing an item requires explicit confirmation.",
+    "steps": [
+      "Sign in on a mobile viewport and open Asset inventory",
+      "Tap Add asset, leave Asset name empty and submit",
+      "Confirm title validation appears, then close editor",
+      "Create a device named QA Remove Me and inspect it",
+      "Tap Delete, cancel confirmation, then delete again and confirm; refresh"
+    ],
+    "expected": "Blank entry is rejected, cancellation leaves the item intact and confirmed deletion removes QA Remove Me persistently."
+  }
+]
