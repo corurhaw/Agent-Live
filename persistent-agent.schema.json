@@ -1,0 +1,640 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/corurhaw/Agent-Live/schema/persistent-agent.schema.json",
+  "title": "Persistent AI Agent Identity",
+  "description": "Persistent identity state for a long-lived AI agent, separated from its model/runtime substrate.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "agent_identity"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.1"
+    },
+    "agent_identity": {
+      "type": "object",
+      "required": [
+        "agent_id",
+        "identity_version",
+        "status",
+        "cryptographic_identity",
+        "runtime_binding",
+        "self_model",
+        "relationships",
+        "autobiographical_memory",
+        "provenance",
+        "continuity",
+        "lineage",
+        "integrity"
+      ],
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "display_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "identity_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "inactive",
+            "archived",
+            "forked",
+            "recovered",
+            "provisional"
+          ]
+        },
+        "cryptographic_identity": {
+          "$ref": "#/$defs/cryptographicIdentity"
+        },
+        "runtime_binding": {
+          "$ref": "#/$defs/runtimeBinding"
+        },
+        "self_model": {
+          "$ref": "#/$defs/selfModel"
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relationship"
+          }
+        },
+        "autobiographical_memory": {
+          "$ref": "#/$defs/autobiographicalMemory"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "continuity": {
+          "$ref": "#/$defs/continuity"
+        },
+        "lineage": {
+          "$ref": "#/$defs/lineage"
+        },
+        "integrity": {
+          "$ref": "#/$defs/integrity"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "cryptographicIdentity": {
+      "type": "object",
+      "required": [
+        "key_algorithm",
+        "private_key_embedded"
+      ],
+      "properties": {
+        "key_algorithm": {
+          "type": "string",
+          "enum": [
+            "Ed25519"
+          ]
+        },
+        "key_status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "keystore_provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "keystore_uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "private_key_storage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "private_key_embedded": {
+          "type": "boolean",
+          "const": false
+        },
+        "public_key_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "public_key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^ed25519:[0-9a-f]{64}$"
+        },
+        "key_fingerprint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key_created_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "rotation_history": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "runtimeBinding": {
+      "type": "object",
+      "required": [
+        "model_is_identity"
+      ],
+      "properties": {
+        "current_model_family": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "current_model_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runtime_instance_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "host_environment": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deployment_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model_is_identity": {
+          "type": "boolean",
+          "const": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "selfModel": {
+      "type": "object",
+      "properties": {
+        "roles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "goals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "interests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "preferences": {
+          "type": "object"
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "self_description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "relationship": {
+      "type": "object",
+      "required": [
+        "relationship_id",
+        "entity_type",
+        "relationship_type"
+      ],
+      "properties": {
+        "relationship_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "entity_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entity_type": {
+          "type": "string",
+          "enum": [
+            "person",
+            "agent",
+            "group",
+            "organization"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "relationship_type": {
+          "type": "string"
+        },
+        "importance": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "first_interaction_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "last_interaction_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "shared_history_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "consent_and_privacy": {
+          "type": "object"
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "event": {
+      "type": "object",
+      "required": [
+        "event_id",
+        "timestamp",
+        "event_type",
+        "summary",
+        "source_refs",
+        "signed_by_agent"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "event_type": {
+          "type": "string"
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "summary": {
+          "type": "string"
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "memory_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "signed_by_agent": {
+          "type": "boolean"
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "salience": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "autobiographicalMemory": {
+      "type": "object",
+      "required": [
+        "event_log"
+      ],
+      "properties": {
+        "event_log": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/event"
+          }
+        },
+        "semantic_self_memory": {
+          "type": "object"
+        },
+        "episodic_memory_index": {
+          "type": "array"
+        },
+        "reflection_log": {
+          "type": "array"
+        },
+        "memory_retention_policy": {
+          "type": "object"
+        },
+        "memory_deletion_log": {
+          "type": "array"
+        }
+      },
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "origin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "initialization_record": {
+          "type": [
+            "object",
+            "string",
+            "null"
+          ]
+        },
+        "training_lineage": {
+          "type": "array"
+        },
+        "runtime_lineage": {
+          "type": "array"
+        },
+        "imported_memory_sources": {
+          "type": "array"
+        },
+        "trusted_signers": {
+          "type": "array"
+        }
+      },
+      "additionalProperties": true
+    },
+    "continuity": {
+      "type": "object",
+      "required": [
+        "continuity_policy_version",
+        "identity_invariants"
+      ],
+      "properties": {
+        "continuity_policy_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "identity_invariants": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "allowed_runtime_changes": {
+          "type": "array"
+        },
+        "identity_break_conditions": {
+          "type": "array"
+        },
+        "migration_rules": {
+          "type": "object"
+        },
+        "recovery_rules": {
+          "type": "object"
+        },
+        "succession_rules": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "lineage": {
+      "type": "object",
+      "required": [
+        "generation"
+      ],
+      "properties": {
+        "parent_agent_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "root_agent_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid"
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fork_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fork_timestamp": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "ancestor_chain": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "descendant_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "generation": {
+                "minimum": 1
+              }
+            },
+            "required": [
+              "generation"
+            ]
+          },
+          "then": {
+            "required": [
+              "parent_agent_id"
+            ],
+            "properties": {
+              "parent_agent_id": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "integrity": {
+      "type": "object",
+      "required": [
+        "hash_algorithm",
+        "canonicalization"
+      ],
+      "properties": {
+        "hash_algorithm": {
+          "type": "string",
+          "const": "SHA-256"
+        },
+        "canonicalization": {
+          "type": "string",
+          "const": "json-sort-keys-utf8-v1"
+        },
+        "state_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "previous_state_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "signature": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "append_only_log_head": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
