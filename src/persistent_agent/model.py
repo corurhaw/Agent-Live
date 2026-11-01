@@ -6,21 +6,42 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import datetime
 from functools import lru_cache
 import hashlib
 from importlib.resources import files
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 from typing import Any, Mapping
 from uuid import UUID
 
 from jsonschema import Draft202012Validator, FormatChecker
 
+_RFC3339_DATETIME_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[Zz]|[+-]\d{2}:\d{2})$"
+)
+
 
 class IdentityValidationError(ValueError):
     """Raised when a record violates the schema or identity invariants."""
+
+
+def _is_rfc3339_datetime(instance: Any) -> bool:
+    if not isinstance(instance, str):
+        return True
+    if not _RFC3339_DATETIME_RE.match(instance):
+        return False
+    normalized = instance[:-1] + "+00:00" if instance[-1] in ("Z", "z") else instance
+    if "t" in normalized:
+        normalized = normalized.replace("t", "T", 1)
+    try:
+        datetime.fromisoformat(normalized)
+    except ValueError:
+        return False
+    return True
 
 
 @lru_cache(maxsize=1)
@@ -29,7 +50,10 @@ def _validator() -> Draft202012Validator:
         files("persistent_agent").joinpath("persistent-agent.schema.json").read_text("utf-8")
     )
     Draft202012Validator.check_schema(schema)
-    return Draft202012Validator(schema, format_checker=FormatChecker())
+    checker = FormatChecker()
+    if "date-time" not in checker.checkers:
+        checker.checks("date-time")(_is_rfc3339_datetime)
+    return Draft202012Validator(schema, format_checker=checker)
 
 
 def _canonical_payload(data: Mapping[str, Any]) -> bytes:
@@ -97,10 +121,41 @@ class IdentityRecord:
         lineage = identity["lineage"]
         agent_id = UUID(identity["agent_id"])
         parent = lineage.get("parent_agent_id")
-        if parent and UUID(parent) == agent_id:
+        parent_uuid = UUID(parent) if parent else None
+        root = lineage.get("root_agent_id")
+        root_uuid = UUID(root) if root else None
+        ancestors = [UUID(x) for x in lineage.get("ancestor_chain", [])]
+        descendants = [UUID(x) for x in lineage.get("descendant_ids", [])]
+
+        if parent_uuid == agent_id:
             raise IdentityValidationError("an identity cannot be its own parent")
-        if lineage["generation"] == 0 and parent is not None:
-            raise IdentityValidationError("generation 0 cannot have a parent")
+        if lineage["generation"] == 0:
+            if parent_uuid is not None:
+                raise IdentityValidationError("generation 0 cannot have a parent")
+            if root_uuid is not None and root_uuid != agent_id:
+                raise IdentityValidationError("generation 0 cannot have a foreign root_agent_id")
+            if ancestors:
+                raise IdentityValidationError("generation 0 cannot have ancestors")
+        elif root_uuid == agent_id:
+            raise IdentityValidationError("forked generation cannot be its own root_agent_id")
+
+        if agent_id in ancestors:
+            raise IdentityValidationError("an identity cannot appear in its own ancestor_chain")
+        if len(ancestors) != len(set(ancestors)):
+            raise IdentityValidationError("ancestor_chain contains duplicate identifiers")
+        if agent_id in descendants:
+            raise IdentityValidationError("an identity cannot appear in its own descendant_ids")
+        if len(descendants) != len(set(descendants)):
+            raise IdentityValidationError("descendant_ids contains duplicate identifiers")
+
+        upstream = set(ancestors)
+        if parent_uuid is not None:
+            upstream.add(parent_uuid)
+        if root_uuid is not None and lineage["generation"] > 0:
+            upstream.add(root_uuid)
+        if upstream & set(descendants):
+            raise IdentityValidationError("lineage cycle detected between ancestors and descendants")
+
         for field, entries in (
             ("relationships", identity["relationships"]),
             ("event_log", identity["autobiographical_memory"]["event_log"]),
@@ -147,6 +202,7 @@ class IdentityRecord:
         self.validate_core_invariants()
         encoded = json.dumps(self.data, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
         target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
         temporary = None
         try:
             with tempfile.NamedTemporaryFile(
