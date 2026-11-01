@@ -34,12 +34,21 @@ class IdentityTests(unittest.TestCase):
                 IdentityRecord(data).validate_core_invariants()
 
     def test_lineage(self):
+        agent_id = self.record.data["agent_identity"]["agent_id"]
+        parent_id = "28338b91-039e-4668-acdb-9cb55982baf1"
         for change in [
             {"generation": True},
             {"generation": 1, "parent_agent_id": None},
             {"generation": 1, "parent_agent_id": "not-a-uuid"},
-            {"generation": 1, "parent_agent_id": self.record.data["agent_identity"]["agent_id"]},
-            {"generation": 0, "parent_agent_id": "28338b91-039e-4668-acdb-9cb55982baf1"},
+            {"generation": 1, "parent_agent_id": agent_id},
+            {"generation": 0, "parent_agent_id": parent_id},
+            {"generation": 0, "root_agent_id": parent_id},
+            {"generation": 0, "ancestor_chain": [parent_id]},
+            {"generation": 1, "parent_agent_id": parent_id, "root_agent_id": agent_id},
+            {"generation": 1, "parent_agent_id": parent_id, "ancestor_chain": [agent_id]},
+            {"generation": 1, "parent_agent_id": parent_id, "ancestor_chain": [parent_id, parent_id]},
+            {"generation": 1, "parent_agent_id": parent_id, "descendant_ids": [agent_id]},
+            {"generation": 1, "parent_agent_id": parent_id, "descendant_ids": [parent_id]},
         ]:
             data = deepcopy(self.record.data)
             data["agent_identity"]["lineage"].update(change)
@@ -53,10 +62,15 @@ class IdentityTests(unittest.TestCase):
         IdentityRecord(data).validate_core_invariants()
 
     def test_uuid_and_timestamp_formats(self):
-        for field, value in [("agent_id", "uuid"), ("created_at", "yesterday")]:
+        for field, value in [
+            ("agent_id", "uuid"),
+            ("created_at", "yesterday"),
+            ("created_at", "2026-09-29"),
+            ("created_at", "2026-02-30T22:00:00Z"),
+        ]:
             data = deepcopy(self.record.data)
             data["agent_identity"][field] = value
-            with self.subTest(field=field), self.assertRaises(IdentityValidationError):
+            with self.subTest(field=field, value=value), self.assertRaises(IdentityValidationError):
                 IdentityRecord(data).validate_core_invariants()
 
     def test_stale_hash_and_explicit_rehash(self):
@@ -95,7 +109,7 @@ class IdentityTests(unittest.TestCase):
     def test_persistent_roundtrip(self):
         record = self.record.with_state_hash()
         with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / "identity.json"
+            path = Path(folder) / "nested" / "dir" / "identity.json"
             record.dump(path)
             loaded = IdentityRecord.load(path)
             self.assertEqual(record.data, loaded.data)
